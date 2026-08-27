@@ -35,7 +35,7 @@ module top_module (
         .vauxp6(vauxp6),
         .vauxn6(vauxn6),
         .audio_data(raw_audio),
-        .sample_valid(raw_valid)
+        .audio_valid(raw_valid)
     );
 
     time_filter u_fir (

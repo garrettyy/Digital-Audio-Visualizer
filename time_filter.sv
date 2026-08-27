@@ -28,9 +28,9 @@ module time_filter (
 
     always_comb begin
         lp_sum = (tap0_ext) +
-                 (tap1_ext <<< 2) +
-                 (tap2_ext <<< 2) + (tap2_ext <<< 1)+
-                 (tap3_ext <<< 2) +
+                 (tap1_ext *4) +
+                 (tap2_ext *6) +
+                 (tap3_ext *2) +
                  (tap4_ext);
     end
     

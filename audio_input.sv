@@ -1,17 +1,18 @@
 `timescale 1ns / 1ps
 
-module audio_input(
-    input  logic clk,
-    input  logic rst,
-    input  logic vauxp6, // Physical pin from the mic
-    input  logic vauxn6, // Physical ground from the mic
-    output logic signed [15:0] audio_data,
-    output logic sample_valid
+module audio_input (
+    input logic clk,
+    input logic rst,
+    input logic vauxn6,
+    input logic vauxp6,
+    output logic signed [15:0] audio_sample,
+    output logic audio_valid
 );
     logic [15:0] adc_raw_data;
-    logic adc_data_ready;
     logic adc_eoc;
+    logic adc_data_ready;
 
+    // Instanitate ADC which produces audio samples at 39kHz
     xadc_wiz_0 XADC_INST (
         .daddr_in(7'h16),     
         .dclk_in(clk),         
@@ -32,16 +33,20 @@ module audio_input(
         .vn_in(1'b0)
     );  
 
-always_ff @(posedge clk or posedge rst) begin
-    if (rst) begin
-        audio_data   <= 16'sd0;
-        sample_valid <= 1'b0;
-    end else if (adc_data_ready) begin
-        // Securely cast the left-aligned unsigned XADC data to a signed format around midscale
-        audio_data   <= $signed(adc_raw_data) - 16'sh8000;
-        sample_valid <= 1'b1;
-    end else begin
-        sample_valid <= 1'b0;
+    always_ff @(posedge clk, posedge rst) begin
+        if (rst) begin
+            audio_sample <= 0;
+            audio_valid <= 0;
+        end
+        else begin
+            audio_valid <= 0;
+            // Only sample audio when ADC says data is ready
+            if (adc_data_ready) begin
+                // Strip DC offset 
+                audio_sample <= $signed(adc_raw_data) - 16'sb1000000000000000; 
+                audio_valid <= 1;
+            end
+        end
     end
-end
+
 endmodule
