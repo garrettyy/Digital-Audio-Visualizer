@@ -56,7 +56,7 @@ endfunction
 genvar i;
 generate 
     for(i = 0; i < 16; i++) begin : bfly_array
-        bfly bfly_unit (.clk(clk), .rst(rst), .A(A[i]), .B(B[i]), .W(W[i]), .out0(out0[i]), .out1(out1[i]));
+        bfly bfly_unit (.A(A_wire[i]), .B(B_wire[i]), .W(W_wire[i]), .out0(out0[i]), .out1(out1[i]));
     end
 endgenerate
 
@@ -64,8 +64,10 @@ endgenerate
 always_ff @(posedge clk, posedge rst) begin
     if(rst) begin
         c_state <= IDLE;
+        fft_valid <= 0;
     end
     else begin
+        fft_valid <= 0;
         case(c_state)
             IDLE: begin
                 // Latch data when fifo is full
@@ -169,6 +171,11 @@ always_ff @(posedge clk, posedge rst) begin
                 c_state <= UNLOAD;
             end
             UNLOAD: begin
+                for (int j = 0; j < 32; j+=2) begin
+                    fft_sample[j] <= buffer0[j/2];
+                    fft_sample[j+1] <= buffer1[j/2];
+                end
+                fft_valid <= 1;
                 c_state <= IDLE;
             end
         endcase
@@ -180,7 +187,6 @@ always_comb begin
     A_wire = '{default:'0};
     B_wire = '{default:'0};
     W_wire = '{default:'0};
-    fft_valid = 0;
     case(c_state)
             IDLE: begin
             end
@@ -304,11 +310,6 @@ always_comb begin
                 end
             end
             UNLOAD: begin
-                for (int j = 0; j < 32; j++) begin
-                    fft_sample[j] = buffer0[j/2];
-                    fft_sample[j+1] = buffer0[j/2];
-                end
-                fft_valid = 1;
             end
     endcase
 end
