@@ -12,7 +12,7 @@ module audio_input (
     logic adc_eoc;
     logic adc_data_ready;
 
-    // Instanitate ADC which produces audio samples at 39kHz
+    // Instantiate ADC which produces audio samples at 39kHz
     xadc_wiz_0 XADC_INST (
         .daddr_in(7'h16),     
         .dclk_in(clk),         
