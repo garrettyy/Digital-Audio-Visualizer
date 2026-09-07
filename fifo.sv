@@ -1,4 +1,4 @@
-module fifo (
+module FIFO (
     input logic clk, rst, audio_valid,
     input logic [15:0] audio_sample,
     output [31:0] parallel_samples [31:0],

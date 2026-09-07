@@ -2,65 +2,59 @@
 
 module time_filter (
     input  logic clk, rst,
-    input  logic sample_valid_in,
+    input  logic sample_valid,
     input  logic sw_filter_enable,
-    input  logic sw_highpass_enable,
+    input  logic highpass_enable,
     input  logic signed [15:0] audio_in,
     output logic signed [15:0] audio_out,
-    output logic sample_valid_out
+    output logic output_valid
 );
 
     logic signed [15:0] tap0, tap1, tap2, tap3, tap4;
 
-    logic signed [19:0] audio_ext, tap0_ext, tap1_ext, tap2_ext, tap3_ext, tap4_ext;
     logic signed [19:0] lp_sum;
-    logic signed [19:0] low_pass_ext, high_pass_ext;
+    logic signed [15:0] lp_scaled;
+    logic signed [16:0] hp;
 
-    assign audio_ext = {{4{audio_in[15]}}, audio_in};
-    assign tap0_ext  = {{4{tap0[15]}}, tap0};
-    assign tap1_ext  = {{4{tap1[15]}}, tap1};
-    assign tap2_ext  = {{4{tap2[15]}}, tap2};
-    assign tap3_ext  = {{4{tap3[15]}}, tap3};
-    assign tap4_ext  = {{4{tap4[15]}}, tap4};
-
-    assign low_pass_ext = lp_sum >>> 4;
-    assign high_pass_ext = (audio_ext - low_pass_ext);
+    assign lp_scaled = lp_sum[19:4];
+    assign hp = audio_in - lp_scaled;
 
     always_comb begin
-        lp_sum = (tap0_ext) +
-                 (tap1_ext *4) +
-                 (tap2_ext *6) +
-                 (tap3_ext *2) +
-                 (tap4_ext);
+        // Calculate Gaussian moving average
+        lp_sum = ((tap0) + (tap1 << 2)) +
+                 ((tap2 << 2) + (tap2 << 1)) +
+                 ((tap3 << 2) + (tap4));
     end
     
     always_ff @(posedge clk or posedge rst) begin
         if (rst) begin
-            tap0 <= 16'sd0;
-            tap1 <= 16'sd0;
-            tap2 <= 16'sd0;
+            tap0 <= 0;
+            tap1 <= 0;
+            tap2 <= 0;
             tap3 <= 0;
             tap4 <= 0;
-            audio_out <= 16'sd0;
-            sample_valid_out <= 1'b0;
+            audio_out <= 0;
+            output_valid <= 0;
         end else begin
-            sample_valid_out <= 1'b0;
+            output_valid <= 0;
 
-            if (sample_valid_in) begin
+            if (sample_valid) begin
+                // 5 tap shift register
                 tap0 <= audio_in;
                 tap1 <= tap0;
                 tap2 <= tap1;
                 tap3 <= tap2;
                 tap4 <= tap3;
                 
+                // Based on on board switches let certain audio pass
                 if (!sw_filter_enable)
                     audio_out <= audio_in;
-                else if (sw_highpass_enable)
-                    audio_out <= high_pass_ext[15:0];
+                else if (highpass_enable)
+                    audio_out <= hp[16:1];
                 else
-                    audio_out <= low_pass_ext[15:0];
+                    audio_out <= lp_scaled;
 
-                sample_valid_out <= 1'b1;
+                output_valid <= 1;
             end
         end
     end

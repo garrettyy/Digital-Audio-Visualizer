@@ -1,73 +1,48 @@
 `timescale 1ns / 1ps
 
 module ping_pong_buffer (
-    input  logic clk,
-    input  logic rst,
-    input  logic vsync,
-    input  logic write_en,
-    input  logic [3:0] write_addr,
-    input  logic [9:0] write_data,
-    input  logic [3:0] read_addr,
-    output logic [9:0] read_data
+    input logic clk, rst,
+    input logic fft_valid, vsync,
+    input logic [9:0] scaled_mags [16:0],
+    output logic [9:0] held_mags [16:0]
 );
 
-    logic active_buffer;
-    logic pending_swap;
-    logic vsync_past;
-    logic vsync_falling_edge;
+logic [9:0] bufferA [16:0];
+logic [9:0] bufferB [16:0];
+logic buffer_toggle;
+logic vsync_past, vsync_edge;
 
-    logic [9:0] ram0 [0:15];
-    logic [9:0] ram1 [0:15];
+// Detect vsync rising edge
+assign vsync_edge = ~vsync_past & vsync;
 
-    assign vsync_falling_edge = vsync_past && !vsync;
-
-    initial begin
-        active_buffer = 1'b0;
-        pending_swap  = 1'b0;
-        vsync_past    = 1'b0;
-
-        for (int i = 0; i < 16; i++) begin
-            ram0[i] = 10'd0;
-            ram1[i] = 10'd0;
+always_ff @(posedge clk, posedge rst) begin
+    if (rst) begin
+        vsync_past <= 0;
+        buffer_toggle <= 0;
+        for (int i =0; i<17; i++) begin
+            bufferA[i] <= 0;
+            bufferB[i] <= 0;
         end
     end
-
-    always_ff @(posedge clk or posedge rst) begin
-        if (rst) begin
-            active_buffer <= 1'b0;
-            pending_swap  <= 1'b0;
-            vsync_past    <= 1'b0;
-        end else begin
-            vsync_past <= vsync;
-
-            if (write_en && write_addr == 4'd15) begin
-                pending_swap <= 1'b1;
-            end
-
-            if (vsync_falling_edge && pending_swap) begin
-                active_buffer <= ~active_buffer;
-                pending_swap  <= 1'b0;
-            end
+    else begin
+        if (vsync_edge)
+            buffer_toggle <= ~buffer_toggle;
+        if (fft_valid) begin // Latch magnitudes when fft is full
+            if (buffer_toggle) // Switch where we write to off vsync
+                bufferB <= scaled_mags;
+            else
+                bufferA <= scaled_mags;
         end
+        vsync_past <= vsync;
     end
+end
 
-    // Freeze the completed back buffer while it waits for the next VSYNC swap.
-    always_ff @(posedge clk) begin
-        if (write_en && !pending_swap) begin
-            if (active_buffer) begin
-                ram0[write_addr] <= write_data;
-            end else begin
-                ram1[write_addr] <= write_data;
-            end
-        end
-    end
-
-    always_comb begin
-        if (active_buffer) begin
-            read_data = ram1[read_addr];
-        end else begin
-            read_data = ram0[read_addr];
-        end
-    end
+// Buffer toggle decides where vga reads from
+always_comb begin
+    if (buffer_toggle)
+        held_mags = bufferA;
+    else
+        held_mags = bufferB;
+end
 
 endmodule
