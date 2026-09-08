@@ -20,12 +20,12 @@ assign {A_real, A_imag}  = {A[31:16],A[15:0]};
 assign {B_real, B_imag}  = {B[31:16],B[15:0]};
 assign {W_real, W_imag}  = {W[31:16],W[15:0]};
 
-// Compute BxW
-assign BxW_real = $signed(B_real) * $signed(W_real) - $signed(B_imag) * $signed(W_imag);
-assign BxW_imag = $signed(B_imag) * $signed(W_real) + $signed(B_real) * $signed(W_imag);
+// Compute BxW 
+assign BxW_real = (B_real * W_real) - (B_imag * W_imag);
+assign BxW_imag = (B_imag * W_real) + (B_real * W_imag);
 
-// Added pipeline registers to delay logic MAC and ADD
-always_ff @(posedge clk) begin // I may need to add reset signal to reset pipeline regs
+// Added pipeline registers to delay logic between MAC and ADD
+always_ff @(posedge clk) begin 
     A_real_pipe <= A_real;
     A_imag_pipe <= A_imag;
     BxW_real_pipe <= BxW_real;
@@ -33,7 +33,7 @@ always_ff @(posedge clk) begin // I may need to add reset signal to reset pipeli
 end
 
 // Compute A+BxW and A-BxW
-assign out0_real = (A_real_pipe + $signed(BxW_real_pipe[30:15])); // Scale down BxW
+assign out0_real = (A_real_pipe + $signed(BxW_real_pipe[30:15])); // Scale down BxW to 16 bits and start from bit 30 because bits 31 and 32 are redundant
 assign out0_imag = (A_imag_pipe + $signed(BxW_imag_pipe[30:15]));
 assign out1_real = (A_real_pipe - $signed(BxW_real_pipe[30:15]));
 assign out1_imag = (A_imag_pipe - $signed(BxW_imag_pipe[30:15]));

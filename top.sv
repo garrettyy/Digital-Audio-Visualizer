@@ -90,7 +90,7 @@ module top_module (
         .vc(vc),
         .vsync(vsync),
         .video_on(video_on),
-        .held_mags(held_mags),
+        .next_mags(held_mags),
         .r(r), .g(g), .b(b)
     );
     vga_timing u_vga (

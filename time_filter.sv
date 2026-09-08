@@ -20,9 +20,9 @@ module time_filter (
     assign hp = audio_in - lp_scaled;
 
     always_comb begin
-        // Calculate Gaussian moving average
+        // Calculate Gaussian moving average and use parantheses for balanced tree adder
         lp_sum = ((tap0) + (tap1 << 2)) +
-                 ((tap2 << 2) + (tap2 << 1)) +
+                 (tap2 << 2) + (tap2 << 1) +
                  ((tap3 << 2) + (tap4));
     end
     

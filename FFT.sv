@@ -19,9 +19,9 @@ logic [31:0] fft_samples [17:0];
 assign fft_out = fft_samples [16:0];
 
 // R means routing stage 
-typedef enum { // I added wait stage in between logic in bfly units specifically to meet timing
+typedef enum { // I added MAC stage in between logic in bfly units specifically to meet timing
     IDLE, 
-    STAGE1_R, STAGE1_MAC, STAGE1_ADD,
+    STAGE1_R, STAGE1_MAC, STAGE1_ADD, // ADD stage does A+BxW and unscrambles routing
     STAGE2_R, STAGE2_MAC, STAGE2_ADD,
     STAGE3_R, STAGE3_MAC, STAGE3_ADD,
     STAGE4_R, STAGE4_MAC, STAGE4_ADD,
