@@ -21,8 +21,8 @@ assign {B_real, B_imag}  = {B[31:16],B[15:0]};
 assign {W_real, W_imag}  = {W[31:16],W[15:0]};
 
 // Compute BxW
-assign BxW_real = $signed(B_real * W_real) - $signed(B_imag * W_imag);
-assign BxW_imag = $signed(B_imag * W_real) + $signed(B_real * W_imag);
+assign BxW_real = $signed(B_real) * $signed(W_real) - $signed(B_imag) * $signed(W_imag);
+assign BxW_imag = $signed(B_imag) * $signed(W_real) + $signed(B_real) * $signed(W_imag);
 
 // Added pipeline registers to delay logic MAC and ADD
 always_ff @(posedge clk) begin // I may need to add reset signal to reset pipeline regs

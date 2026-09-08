@@ -43,7 +43,7 @@ module audio_input (
             // Only sample audio when ADC says data is ready
             if (adc_data_ready) begin
                 // Strip DC offset 
-                audio_sample <= $signed(adc_raw_data) - 16'sb1000000000000000; 
+                audio_sample <= $signed(adc_raw_data) - 16'sh8000; 
                 audio_valid <= 1;
             end
         end

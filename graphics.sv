@@ -25,14 +25,17 @@ module graphics (
             
             // Update the animation once per frame
             if (vsync_edge) begin
-                for (int i=0; i<17; i++) begin
+                for (int i=1; i<17; i++) begin // Start at 1 to ignore bin 0
                     
                     if (held_mags[i] > draw_mags[i])
                         // Snap up to the loud sound (and cap at 480 to prevent underflow!)
                         draw_mags[i] <= (held_mags[i] > 480) ? 10'd480 : held_mags[i];
-                    else if (draw_mags[i] > 0)
-                        // Slowly fall down by 1 pixel per frame
-                        draw_mags[i] <= draw_mags[i] - 1;
+
+                    else if (draw_mags[i] > 15)
+                        // Fast fall down by 15 pixels per frame
+                        draw_mags[i] <= draw_mags[i] - 15;
+                    else
+                        draw_mags[i] <= 0;
                         
                 end
             end
