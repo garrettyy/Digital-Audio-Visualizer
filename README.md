@@ -4,6 +4,8 @@ A real-time digital audio visualizer implemented entirely in SystemVerilog on a 
 
 ## Demo
 
+https://github.com/user-attachments/assets/9ac232ad-91ea-4fb0-a2b0-37edfbde09d6
+
 ## Block Diagram
 
 <!-- To add a block diagram:
