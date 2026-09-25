@@ -27,7 +27,7 @@ module graphics (
             if (vsync_edge) begin
                 for (int i=1; i<17; i++) begin // Start at 1 to ignore bin 0
                     if (next_mags[i] > draw_mags[i])
-                        draw_mags[i] <= (next_mags[i] > 480) ? 10'd480 : next_mags[i]; // Update to new height with a cap
+                        draw_mags[i] <= (next_mags[i] > 480) ? 10'd480 : next_mags[i]; // Jump to new height with a cap if greater
                     else if (draw_mags[i] > 15)
                         draw_mags[i] <= draw_mags[i] - 15; // Slowly lower bar heights for visual effect when next_mags is lower
                     else
@@ -46,7 +46,7 @@ module graphics (
 
     assign hc_active = hc - 64; 
     assign bar_index = hc_active[8:4]; // Split active region into 32 sections (5 bit index)
-    assign pixel_in_bar = hc_active[3:0]; // This array slicing does mod 16 (% 16)
+    assign pixel_in_bar = hc_active[3:0]; // This array slicing does modulo 16 (% 16) which tells us the exact pixel within a bin
 
     assign read_index = (bar_index > 16) ? (32 - bar_index) : bar_index; // Mirrors bins after bin 16 and reads current bar index
     
@@ -61,7 +61,7 @@ module graphics (
                     r = 4'h0; g = 4'hF; b = 4'h0; // Green bar
                     
                     if (pixel_in_bar < 2) begin 
-                        r = 4'h0; g = 4'h0; b = 4'h0; // Black gap
+                        r = 4'h0; g = 4'h0; b = 4'h0; // Black gap for first 2 pixels of each bin
                     end
                 end
             end
