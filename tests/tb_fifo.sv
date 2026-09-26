@@ -20,6 +20,7 @@ end
 task automatic reset_dut();
     rst = 1;
     audio_valid = 0;
+    audio_sample = '0;
     @(posedge clk);
     @(posedge clk);
     rst = 0;
@@ -28,20 +29,37 @@ task automatic reset_dut();
 endtask
 
 initial begin
-    // RESET
-    audio_sample = '0;
     reset_dut();
+
     // Test with all samples filled with 1's
-    audio_sample = '1;
+    @(negedge clk);
     audio_valid = 1;
+    audio_sample = '1;
     wait(samples_ready);
     #1;
+    @(negedge clk); 
     audio_valid =0;
     for (int i = 0; i < 32; i++) begin 
-        assert(parallel_samples[i][31:16] == '1) else $fatal(1, "Mismatch! Bin: %0d Value: %h", i, parallel_samples[i]);
+        assert(parallel_samples[i][31:16] == '1) else $fatal(1, "Mismatch! Bin: %0d Value: %h", i, parallel_samples[i][31:16]);
     end
 
-
+    reset_dut();
+    
+    // Test sequential
+    for (int j = 0; j < 10; j++) begin // Outer loop is to test if index wraps around for multiple frames with different sequences
+        for (int i = j; i < 32+j; i++) begin
+            @(negedge clk);
+            audio_valid = 1;
+            audio_sample = 16'(i);
+        end
+        wait(samples_ready); 
+        #1;
+        @(negedge clk); 
+        audio_valid = 0;
+        for (int i = 0; i < 32; i++) begin 
+            assert(parallel_samples[i][31:16] == 16'(i) + 16'(j)) else $fatal(1, "Mismatch! Frame %0d; Bin %0d = %h", j, i, parallel_samples[i][31:16]);
+        end
+    end
 
     $display("Passed!");
     $finish;
