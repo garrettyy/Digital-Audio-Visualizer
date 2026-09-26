@@ -28,8 +28,10 @@ task automatic reset_dut();
 endtask
 
 initial begin
+    // RESET
     audio_sample = '0;
     reset_dut();
+    // Test with all samples filled with 1's
     audio_sample = '1;
     audio_valid = 1;
     wait(samples_ready);
