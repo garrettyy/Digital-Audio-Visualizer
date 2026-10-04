@@ -1,10 +1,10 @@
-module tb_fifo;
+module tb_frame_buffer;
 
 logic clk, rst, audio_valid, samples_ready;
 logic [15:0] audio_sample;
 logic [31:0] parallel_samples [31:0];
 
-FIFO dut (.clk(clk),
+frame_buffer dut (.clk(clk),
     .rst(rst),
     .audio_valid(audio_valid),
     .audio_sample(audio_sample),
@@ -57,7 +57,7 @@ initial begin
         @(negedge clk); 
         audio_valid = 0;
         for (int i = 0; i < 32; i++) begin 
-            assert(parallel_samples[i][31:16] == 16'(i) + 16'(j)) else $fatal(1, "Mismatch! Frame %0d; Bin %0d = %h", j, i, parallel_samples[i][31:16]);
+            assert(parallel_samples[i][31:16] == 16'(i) + 16'(j)) else $error("Mismatch! Frame %0d; Bin %0d = %h", j, i, parallel_samples[i][31:16]);
         end
     end
 

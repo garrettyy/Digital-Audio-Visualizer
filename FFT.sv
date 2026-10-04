@@ -1,10 +1,10 @@
 `timescale 1ns / 1ps
 
 module FFT (
-    input logic clk, rst, samples_ready,
+    input logic clk, rst, s_axis_tvalid, m_axis_tready,
     input logic [31:0] parallel_samples [31:0],
-    output logic [31:0] fft_out [16:0],
-    output logic fft_valid
+    output logic [31:0] m_axis_tdata [16:0],
+    output logic s_axis_tready, m_axis_tvalid
 );
 
 logic [31:0] buffer0 [15:0];
@@ -15,8 +15,16 @@ logic [31:0] B_reg [15:0];
 logic [31:0] out0 [15:0];
 logic [31:0] out1 [15:0];
 
-logic [31:0] fft_samples [17:0];
-assign fft_out = fft_samples [16:0];
+genvar k;
+generate
+    // Only stream bins 0 to 16 because second half is mirrored
+    for (k = 0; k < 17; k++) begin
+        // If k is even, route from buffer0. If k is odd, route from buffer1.
+        assign m_axis_tdata[k] = (k % 2 == 0) ? buffer0[k/2] : buffer1[k/2];
+    end
+endgenerate
+
+assign s_axis_tready = (c_state == IDLE); // Drive high when data can overwrite the buffer
 
 // R means routing stage 
 typedef enum { // I added MAC stage in between logic in bfly units specifically to meet timing
@@ -68,14 +76,14 @@ endgenerate
 always_ff @(posedge clk, posedge rst) begin
     if(rst) begin
         c_state <= IDLE;
-        fft_valid <= 0;
+        m_axis_tvalid <= 0;
     end
     else begin
-        fft_valid <= 0;
+        
         case(c_state)
             IDLE: begin
                 // Latch data when fifo is full
-                if (samples_ready) begin
+                if (s_axis_tvalid & s_axis_tready) begin
                     int x;
                     c_state <= STAGE1_R;
                     for (int j=0; j < 32; j+=2) begin
@@ -310,19 +318,18 @@ always_ff @(posedge clk, posedge rst) begin
                     buffer0[j+15] <= out1[j+14];
                     buffer1[j+15] <= out1[j+15];
                 end
+                m_axis_tvalid <= 1; // Must raise valid flag independently of m_axis_tready input
                 c_state <= UNLOAD;
+                
             end
             UNLOAD: begin
-                // Only stream bins 0 to 16 because second half is mirrored
-                for (int j = 0; j < 18; j+=2) begin
-                    fft_samples[j] <= buffer0[j/2];
-                    fft_samples[j+1] <= buffer1[j/2];
-                end
-                fft_valid <= 1;
                 c_state <= IDLE;
+                if (m_axis_tvalid && m_axis_tready) 
+                    m_axis_tvalid <= 0; // Drive low immediately because transmission is done after one clock cycle
             end
-    endcase
+        endcase
     end
 end
+
 
 endmodule 

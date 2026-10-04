@@ -5,8 +5,10 @@ module audio_input (
     input logic rst,
     input logic vauxn6,
     input logic vauxp6,
-    output logic signed [15:0] audio_sample,
-    output logic audio_valid
+    
+    output logic signed [15:0] m_axis_tdata,
+    output logic m_axis_tvalid,
+    input  logic m_axis_tready
 );
     logic [15:0] adc_raw_data;
     logic adc_eoc;
@@ -35,16 +37,20 @@ module audio_input (
 
     always_ff @(posedge clk, posedge rst) begin
         if (rst) begin
-            audio_sample <= 0;
-            audio_valid <= 0;
+            m_axis_tdata <= 0;
+            m_axis_tvalid <= 0;
         end
         else begin
-            audio_valid <= 0;
+            // Drop valid flag when sample is transmitted
+            if (m_axis_tready && m_axis_tvalid) begin
+                m_axis_tvalid <= 0;
+            end
+            
             // Only sample audio when ADC says data is ready
             if (adc_data_ready) begin
                 // Strip DC offset 
-                audio_sample <= $signed(adc_raw_data) - 16'sh8000; 
-                audio_valid <= 1;
+                m_axis_tdata <= $signed(adc_raw_data) - 16'sh8000; 
+                m_axis_tvalid <= 1;
             end
         end
     end

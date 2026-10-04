@@ -16,8 +16,8 @@ https://github.com/user-attachments/assets/9ac232ad-91ea-4fb0-a2b0-37edfbde09d6
 <!-- ![Block Diagram](block_diagram.png) -->
 
 ```
-Mic ─→ audio_input ─→ time_filter ─→ FIFO ─→ FFT ─→ mag_calc ─→ ping_pong_buf ─→ graphics ─→ VGA
-          (XADC)       (LPF/HPF)    (32-deep)  (32-pt)  (|Re|+|Im|)  (double buf)   (decay+render)
+Mic ─→ audio_input ─→ time_filter ─→ frame_buffer ─→ FFT ─→ mag_calc ─→ ping_pong_buf ─→ graphics ─→ VGA
+          (XADC)       (LPF/HPF)      (32-deep)    (32-pt)  (|Re|+|Im|)  (double buf)   (decay+render)
                            ↑
                        Switches
 ```
@@ -26,22 +26,21 @@ Mic ─→ audio_input ─→ time_filter ─→ FIFO ─→ FFT ─→ mag_calc
 
 | Module | File | Description |
 |--------|------|-------------|
-| **audio_input** | `audio_input.sv` | Wraps the Xilinx XADC IP to sample the mic at ~39 kHz. Subtracts `0x8000` to convert the unipolar ADC output to a signed 16-bit audio stream. |
-| **time_filter** | `time_filter.sv` | Switchable 5-tap Gaussian Low-Pass and High-Pass filter. Two on-board switches select bypass, LPF, or HPF mode. |
-| **FIFO** | `FIFO.sv` | Collects 32 consecutive audio samples into a parallel register array and pulses `samples_ready` when full. |
-| **FFT** | `FFT.sv` | Custom 32-point Radix-2 Decimation-in-Time FFT. Bit-reverses input, then processes 5 butterfly stages using 16 parallel `bfly` units. Outputs 17 complex frequency bins (DC through Nyquist). |
-| **bfly** | `bfly.sv` | Radix-2 butterfly unit. Computes A + B×W and A − B×W using Q15 fixed-point twiddle factors with a 1-cycle pipeline register between MAC and ADD. |
-| **mag_calc** | `mag_calc.sv` | Combinational magnitude approximation using `|Re| + |Im|`. Scales the result down to 10 bits for display. |
-| **ping_pong_buffer** | `pingpongbuffer.sv` | Double buffer synchronized to VGA vsync. Latches FFT magnitudes into one buffer while the graphics engine reads from the other, preventing visual tearing between the FFT and VGA clock domains. |
-| **graphics** | `graphics.sv` | Bar graph renderer with peak-hold gravity animation. Snaps bars up instantly on loud transients and decays them at 15 pixels/frame. Renders 32 mirrored bars (16 bins × 2) with 2-pixel black gaps across a 512-pixel-wide region. |
-| **vga_timing** | `vga_timing.sv` | Generates standard 640×480 @ 60 Hz VGA timing signals (hsync, vsync, video_on, hc, vc). |
+| **audio_input** | `audio_input.sv` | Wraps the Xilinx XADC IP to sample the mic at ~39 kHz. Converts to signed 16-bit audio and drives an AXI4-Stream Master interface. |
+| **time_filter** | `time_filter.sv` | Switchable 5-tap Gaussian LPF and HPF. Acts as a continuous AXI4-Stream passthrough, automatically stalling upstream when backpressure is applied. |
+| **frame_buffer** | `frame_buffer.sv` | Sinks the continuous serial AXI-Stream audio and converts it into parallel arrays of 32 samples. Exerts hardware backpressure (`tready = 0`) while holding a complete frame for the FFT. |
+| **FFT** | `FFT.sv` | Custom 32-point Radix-2 Decimation-in-Time FFT. Uses 16 parallel `bfly` units recursively over 5 stages. Drives a massive parallel AXI-Stream bus out to the Ping-Pong buffer. |
+| **bfly** | `bfly.sv` | Radix-2 butterfly unit. Computes A + B×W and A − B×W using Q15 fixed-point twiddle factors. |
+| **mag_calc** | `mag_calc.sv` | Combinational magnitude approximation using `\|Re\| + \|Im\|`. |
+| **ping_pong_buffer** | `pingpongbuffer.sv` | The architectural boundary bridging the AXI-Stream DSP datapath to the Video Memory-Mapped domain. Latches FFT magnitudes into one buffer while the VGA reads the other, preventing screen tearing. |
+| **graphics** | `graphics.sv` | Bar graph renderer with peak-hold gravity animation. Renders 32 mirrored bars. |
+| **vga_timing** | `vga_timing.sv` | Generates standard 640×480 @ 60 Hz VGA timing signals. |
 
 ## Key Design Decisions
 
-- **Pipelined FFT State Machine:** Each butterfly stage is broken into three sub-states: Routing (R), Multiply-Accumulate (MAC), and Add/Unscramble (ADD). The R stage loads operands and twiddle factors into the 16 parallel butterfly units. The MAC state is a pipeline wait cycle that allows the `bfly` internal pipeline register to settle between the complex multiplication and the addition. The ADD stage captures butterfly outputs and unscrambles them back into the dual-array (`buffer0`, `buffer1`) layout for the next stage.
-- **Q15 Fixed-Point Arithmetic:** Twiddle factors are pre-scaled by 2^15, allowing efficient integer-only complex multiplication without floating-point hardware. The butterfly unit de-scales by slicing `[30:15]` after multiplication, which is valid because bits 31 and 32 are redundant sign extension from Q15 math.
-- **No Data Path Resets:** Pipeline registers in the butterfly units and FFT buffers are intentionally left without reset logic to minimize routing congestion and improve timing closure. Only control signals (state machines, valid flags) are reset. Graphics `draw_mags` is an exception — it is reset because it is directly read by the VGA render logic on every pixel clock.
-- **Ping-Pong Magnitude Latching:** The double buffer latches scaled FFT magnitudes (not full VGA frames) on `fft_valid`, and swaps read/write sides on vsync edges. This ensures the graphics engine always reads a complete, coherent set of 17 magnitude values while the FFT asynchronously writes new results.
-- **Valid Flag Handshaking:** The entire pipeline is driven by single-cycle valid pulses rather than a global enable. The XADC asserts `audio_valid` at ~39 kHz, which is orders of magnitude slower than the 100 MHz system clock. Each downstream module waits idle until its upstream valid fires: `audio_valid` triggers the time filter, `filtered_valid` feeds the FIFO, `samples_ready` kicks off the FFT state machine, and `fft_valid` latches magnitudes into the ping-pong buffer. This lets each module run at its own pace — the FFT can take dozens of clock cycles to compute all 5 butterfly stages while the XADC continues sampling, and the VGA engine renders at 60 Hz completely independent of both. No module ever stalls or wastes cycles polling.
-- **Magnitude Approximation:** Uses `|Re| + |Im|` instead of `sqrt(Re² + Im²)` to avoid multipliers and square root hardware while maintaining adequate visual accuracy.
-- **Mirrored Display:** The FFT of a real signal is conjugate-symmetric, so only bins 0–16 are computed. The graphics module mirrors them to fill the full 512-pixel display width.
+- **AXI4-Stream Protocol & Hardware Backpressure:** The entire DSP datapath (ADC -> FIR -> Buffer -> FFT -> Memory) was architected using the industry-standard AMBA AXI4-Stream protocol (`tdata`, `tvalid`, `tready`). This establishes robust hardware backpressure: if the FFT is actively computing and cannot accept new data, it pulls `tready` low, safely stalling the upstream frame buffer and FIR filter until computation finishes.
+- **Task-Level Pipelining:** The system operates as a Macro-Pipeline. While the VGA controller is displaying Frame $N-1$ from the Ping-Pong buffer, the FFT is simultaneously computing Frame $N$, and the Frame Buffer is gathering audio samples for Frame $N+1$. This concurrent streaming architecture ensures maximum throughput.
+- **Iterative FFT State Machine:** To save massive amounts of FPGA silicon, the FFT is not fully unrolled. Instead, it re-uses 16 physical butterfly units across 5 sequential stages. Because it is an iterative accelerator, it takes ~15 clock cycles to compute a frame, during which it utilizes AXI backpressure to pause upstream data ingestion.
+- **Q15 Fixed-Point Arithmetic:** Twiddle factors are pre-scaled by 2^15, allowing efficient integer-only complex multiplication without floating-point hardware.
+- **Clock Domain / Architecture Boundaries:** AXI-Stream is utilized strictly for the sequential, high-speed point-to-point DSP datapath. Once frequency bins are calculated, they cross the architectural boundary into the Ping-Pong buffer, which acts as a static Memory-Mapped array that the VGA Graphics engine can randomly access based on `x/y` pixel coordinates.
+- **Magnitude Approximation:** Uses `\|Re\| + \|Im\|` instead of `sqrt(Re² + Im²)` to avoid multipliers and square root hardware while maintaining adequate visual accuracy.

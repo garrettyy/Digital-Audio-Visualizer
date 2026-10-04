@@ -2,15 +2,18 @@
 
 module ping_pong_buffer (
     input logic clk, rst,
-    input logic fft_valid, vsync,
+    input logic s_axis_tvalid, vsync,
     input logic [9:0] scaled_mags [16:0],
-    output logic [9:0] held_mags [16:0]
+    output logic [9:0] held_mags [16:0],
+    output logic s_axis_tready
 );
 
 logic [9:0] bufferA [16:0];
 logic [9:0] bufferB [16:0];
 logic buffer_toggle;
 logic vsync_past, vsync_edge;
+
+assign s_axis_tready = 1;
 
 // Detect vsync rising edge
 assign vsync_edge = ~vsync_past & vsync;
@@ -27,7 +30,7 @@ always_ff @(posedge clk, posedge rst) begin
     else begin
         if (vsync_edge)
             buffer_toggle <= ~buffer_toggle;
-        if (fft_valid) begin // Latch magnitudes when fft is full
+        if (s_axis_tvalid && s_axis_tready) begin // Latch magnitudes when fft is full
             if (buffer_toggle) // Switch where we write to off vsync
                 bufferB <= scaled_mags;
             else
